@@ -215,19 +215,8 @@ void WebController::resetCamera()
 
 void WebController::deleteSelection()
 {
-  auto* rw = m_molecule->undoMolecule();
-  auto& stack = rw->undoStack();
-  bool any = false;
-  for (Index i = 0; i < m_molecule->atomCount(); ++i)
-    any |= m_molecule->atom(i).selected();
-  if (!any)
-    return;
-  stack.beginMacro(tr("Delete selected atoms"));
-  for (Index i = m_molecule->atomCount(); i > 0; --i)
-    if (m_molecule->atom(i - 1).selected())
-      rw->removeAtom(i - 1);
-  stack.endMacro();
-  rw->emitChanged(QtGui::Molecule::Atoms | QtGui::Molecule::Bonds |
-                  QtGui::Molecule::Removed);
+  // The Editor command checks active, selected and neighbouring layer locks
+  // before making a single undoable edit.
+  m_tools["draw"]->handleCommand("removeSelectedAtoms", {});
 }
 } // namespace Avogadro::Web

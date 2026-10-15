@@ -14,6 +14,7 @@
 #include <avogadro/qtopengl/glwidget.h>
 #include <avogadro/qtplugins/pluginmanager.h>
 #include <gtest/gtest.h>
+#include <vector>
 
 using namespace Avogadro;
 class WebEditorTest : public testing::Test
@@ -194,6 +195,62 @@ TEST_F(WebEditorTest, DeleteAndSaveState)
   EXPECT_FALSE(editor.state()["modified"].toBool());
   editor.newMolecule();
   EXPECT_FALSE(editor.state()["canUndo"].toBool());
+}
+
+TEST_F(WebEditorTest, DeleteSelectionRespectsLockedAtomsAndNeighbours)
+{
+  ASSERT_TRUE(
+    editor
+      .loadMolecule("3\nLocked neighbour\nC 0 0 0\nO 1.4 0 0\nN 5 0 0\n",
+                    "xyz")["ok"]
+      .toBool());
+  editor.molecule().addBond(0, 1, 1);
+  auto info = editor.molecule().layerInfo();
+  info->layer.addLayer();
+  info->locked.push_back(true);
+  info->visible.push_back(true);
+  editor.molecule().setLayer(1, 1);
+
+  // Exercise locks from an imported document, including an unlocked selected
+  // atom bonded to a locked atom and a mixed safe/unsafe selection.
+  const auto document = editor.exportMolecule("cjson")["text"].toString();
+  ASSERT_TRUE(editor.loadMolecule(document, "cjson")["ok"].toBool());
+  for (const auto& selected :
+       std::vector<std::vector<Index>>{ { 1 }, { 0 }, { 0, 2 } }) {
+    for (Index i = 0; i < editor.molecule().atomCount(); ++i)
+      editor.molecule().setAtomSelected(i, false);
+    for (Index i : selected)
+      editor.molecule().setAtomSelected(i, true);
+    const QJsonValue before = editor.exportMolecule("cjson")["text"];
+    editor.deleteSelection();
+    EXPECT_EQ(editor.exportMolecule("cjson")["text"], before);
+    EXPECT_FALSE(editor.state()["canUndo"].toBool());
+    EXPECT_FALSE(editor.state()["modified"].toBool());
+  }
+
+  // A safe selection in the same document still deletes as one undo step.
+  editor.molecule().setAtomSelected(0, false);
+  editor.deleteSelection();
+  EXPECT_EQ(editor.molecule().atomCount(), 2);
+  EXPECT_EQ(editor.molecule().bondCount(), 1);
+  editor.undo();
+  EXPECT_EQ(editor.molecule().atomCount(), 3);
+  EXPECT_EQ(editor.molecule().bondCount(), 1);
+  EXPECT_FALSE(editor.state()["canUndo"].toBool());
+  EXPECT_FALSE(editor.state()["modified"].toBool());
+}
+
+TEST_F(WebEditorTest, DeleteSelectionRespectsActiveLayerLock)
+{
+  editor.setDrawOptions({ { "adjustHydrogens", false } });
+  clickAtom();
+  editor.molecule().undoMolecule()->undoStack().clear();
+  editor.molecule().setAtomSelected(0, true);
+  editor.molecule().layerInfo()->locked[0] = true;
+  editor.deleteSelection();
+  EXPECT_EQ(editor.molecule().atomCount(), 1);
+  EXPECT_FALSE(editor.state()["canUndo"].toBool());
+  EXPECT_FALSE(editor.state()["modified"].toBool());
 }
 
 TEST_F(WebEditorTest, ReplacingDocumentReleasesLayerState)
