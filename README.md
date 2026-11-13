@@ -5,6 +5,22 @@ A desktop-browser molecular editor with HTML controls around one Qt-backed
 uses Avogadro's molecular readers, writers, and undo transactions.
 It does not create the desktop main window, menus, tool panels, or file dialogs.
 
+## Workspace interface
+
+The editor opens in dark mode. The sun/moon control switches the interface and
+molecular canvas between dark and light, remembering the choice in this browser.
+Document actions and export are in the top bar; molecular tools are on the left.
+The right inspector contains Tool, Display, and Calculate tabs. Close it for more
+canvas space, or reopen it with **Inspector**. Below 1000px it becomes a drawer.
+The inspector tabs support arrow keys, Home and End; Escape closes the export
+popover or compact inspector. Tool buttons have labels and hover/focus tooltips.
+
+The interface uses the capabilities advertised by its runtime. Older CI packages
+with only Draw, Navigate and Select still work, but retain their fixed dark canvas
+and explain unavailable display/calculation controls. Build this source with a
+plugin-enabled Avogadro installation for all tools, calculations, and canvas
+color switching. Theme changes never enter molecular undo history.
+
 ## Run the CI build
 
 1. Sign in to GitHub and [download the avogadro-web-wasm ZIP](https://github.com/OpenChemistry/avogadrolibs/actions/runs/43511417867/artifacts/14079587329).
@@ -96,6 +112,7 @@ on the Qt application thread, return values, and expose no C++ pointers.
 - `alignPickedAtoms('x' | 'y' | 'z')` and `setPickedLabel(label)` operate on
   picks in their respective tools
 - `setDrawOptions({ atomicNumber: 1..118, bondOrder: 0..3, adjustHydrogens: bool, adjustBondLengths: bool })`
+- `setTheme('dark' | 'light')` returns whether the runtime supports canvas themes
 - `newMolecule()`, `loadMolecule(text, format)`, `exportMolecule(format = 'cjson')`
 - `deleteSelection()`, `undo()`, `redo()`, `resetCamera()`
 - `state` and `statechange` events containing tool, drawOptions, atomCount,
@@ -120,6 +137,18 @@ xvfb-run -a node avogadro-web/tests/firefox-smoke.mjs \
 node avogadro-web/tests/startup-failures.mjs stage-web-new/share/avogadro-web
 python3 avogadro-web/tests/check-build-profile.py build-web-new
 ```
+
+The workspace-specific checks cover theme persistence, document preservation,
+responsive layouts, keyboard tabs, loading/failure states and runtime exit:
+
+```sh
+PUPPETEER_MODULE=/path/to/puppeteer-core/lib/puppeteer/puppeteer-core.js \
+  node avogadro-web/tests/ui-smoke.mjs http://127.0.0.1:8000 evidence/ui --full-runtime
+```
+
+Omit `--full-runtime` when testing older CI artifacts. Set `AVOGADRO_UI_FIXTURE`
+to a local molecule file to also capture representative molecule and label views.
+No browser test attaches to an existing user browser profile.
 
 To include the external `QWidget::update()` regression, build WASM with
 `-DENABLE_TESTING=ON`, serve that build, and run:
