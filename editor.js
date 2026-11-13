@@ -57,6 +57,36 @@ const toolHelp = {
   MeasureTool: 'Click up to four atoms to measure distances, angles, and dihedrals. Double-click to clear.',
 };
 
+async function registerMoleculeTool() {
+  const context = document.modelContext ?? navigator.modelContext;
+  if (typeof context?.registerTool !== 'function') return;
+
+  await context.registerTool({
+    name: 'inspect_molecule',
+    description: 'Read the current Avogadro molecule, including unsaved edits. Returns atoms and bond orders for verifying composition and connectivity. Bond endpoints are zero-based atom indices.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    execute() {
+      try {
+        const { atomCount, bondCount, modified } = editor.state;
+        if (atomCount === 0) return { atomCount, bondCount, modified, atoms: [], bonds: [] };
+
+        const molecule = JSON.parse(editor.exportMolecule());
+        const atoms = molecule.atoms.elements.number.map(atomicNumber => ({ atomicNumber }));
+        const endpoints = molecule.bonds?.connections.index ?? [];
+        const bonds = (molecule.bonds?.order ?? []).map((order, index) => ({
+          begin: endpoints[2 * index],
+          end: endpoints[2 * index + 1],
+          order,
+        }));
+        return { atomCount, bondCount, modified, atoms, bonds };
+      } catch {
+        return { error: 'Unable to inspect the current molecule.' };
+      }
+    },
+  });
+}
+
 function setupPlugins(state) {
   const tools = new Map(state.tools.map(tool => [tool.id, tool]));
   const order = ['navigate', 'draw', 'select'];
@@ -264,6 +294,7 @@ try {
   new ResizeObserver(() => instance.qtResizeContainerElement($('viewport'))).observe($('viewport'));
   $('loading').hidden = true; $('controls').disabled = false;
   render(editor.state);
+  registerMoleculeTool().catch(error => console.warn('Unable to register the Avogadro WebMCP tool.', error));
 } catch (error) {
   console.error(error);
   $('loading').textContent = error.message;
